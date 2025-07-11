@@ -1,35 +1,74 @@
 import { useEffect, useRef } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 
 const QrCodeScanner = ({ qrbox = 250, fps = 10, onResult }: { qrbox?: number, fps?: number, onResult: (decodedText: string, decodedResult: any) => void }) => {
-  const scannerRef = useRef(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
 
   useEffect(() => {
-    const config = { fps, qrbox };
+    if (!videoRef.current) return;
 
-    const html5QrcodeScanner = new Html5QrcodeScanner(
-      'qr-code-full-region',
-      config,
-      /* verbose= */ false
-    );
+    const reader = new BrowserMultiFormatReader();
+    readerRef.current = reader;
 
-    html5QrcodeScanner.render(
-      (decodedText, decodedResult) => {
-        if (onResult) onResult(decodedText, decodedResult);
-      },
-      (error) => {
-        console.error('QR code scanning error:', error);
-      }
-    );
+    reader
+      .decodeFromVideoDevice(
+        undefined, // Use default camera
+        videoRef.current,
+        (result, error) => {
+          if (result) {
+            onResult(result.getText(), result);
+          }
+          if (error && error.name !== 'NotFoundException') {
+            console.error('QR code scanning error:', error);
+          }
+        }
+      )
+      .catch((error) => {
+        console.error('Failed to start video stream:', error);
+      });
 
     return () => {
-      html5QrcodeScanner.clear().catch(error => {
-        console.error('Failed to clear QR scanner', error);
-      });
+      if (readerRef.current) {
+        // Cleanup will happen automatically when component unmounts
+        readerRef.current = null;
+      }
     };
-  }, [fps, qrbox, onResult]);
+  }, [onResult]);
 
-  return <div id="qr-code-full-region" ref={scannerRef}></div>;
+  return (
+    <div className="relative">
+      <video
+        ref={videoRef}
+        className="w-full max-w-md mx-auto"
+        style={{
+          width: '100%',
+          height: 'auto',
+          maxWidth: `${qrbox}px`,
+          maxHeight: `${qrbox}px`
+        }}
+      />
+      <div
+        className="absolute inset-0 border-2 border-blue-500 pointer-events-none"
+        style={{
+          width: `${qrbox}px`,
+          height: `${qrbox}px`,
+          maxWidth: '100%',
+          maxHeight: '100%',
+          margin: '0 auto',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)'
+        }}
+      >
+        {/* Corner indicators */}
+        <div className="absolute top-0 left-0 w-6 h-6 border-l-4 border-t-4 border-blue-500"></div>
+        <div className="absolute top-0 right-0 w-6 h-6 border-r-4 border-t-4 border-blue-500"></div>
+        <div className="absolute bottom-0 left-0 w-6 h-6 border-l-4 border-b-4 border-blue-500"></div>
+        <div className="absolute bottom-0 right-0 w-6 h-6 border-r-4 border-b-4 border-blue-500"></div>
+      </div>
+    </div>
+  );
 };
 
 export default QrCodeScanner;
